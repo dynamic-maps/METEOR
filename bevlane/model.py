@@ -2785,7 +2785,8 @@ class DepthSegIPMNetV27(DepthSegIPMNetV26):
         out = super().forward(imgs, K, T_cam_ego, v0, prev_bev, warp_theta)
         B, N = imgs.shape[:2]
         f = self._f_s4.view(B, N, -1, *self._f_s4.shape[-2:])
-        ff = torch.cat([f[:, 0], f[:, 6]], 1)   # FRONT_WIDE + FRONT_NARROW
+        front_narrow = f[:, 6] if N > 6 else f[:, 0]
+        ff = torch.cat([f[:, 0], front_narrow], 1)
         return out + (self.tl_fc(self.tl_head(ff).flatten(1)),)
 
     def tl_loss(self, tl_pred, tl_gt):
