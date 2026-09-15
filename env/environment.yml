@@ -2,7 +2,6 @@ name: meteor
 channels:
   - conda-forge
   - nodefaults
-  - defaults
 dependencies:
   - python=3.10
 prefix: /home/tatsuhiko/miniconda3/envs/meteor
