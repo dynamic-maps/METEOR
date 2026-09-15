@@ -32,10 +32,12 @@ try:                                     # imported lazily so decode utils
     # raises "Cuda Runtime (invalid resource handle)" in every reformat layer
     # (bit us on a laptop GPU). Orin has no pycuda and falls back to the cudart
     # shim, so it never showed there. Retain the primary context and share it.
+    import atexit
     import pycuda.driver as cuda
     cuda.init()
     _pyc_ctx = cuda.Device(0).retain_primary_context()
     _pyc_ctx.push()
+    atexit.register(_pyc_ctx.pop)
     import tensorrt as trt
     _TRT = True
 except Exception:                        # pragma: no cover
