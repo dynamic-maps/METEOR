@@ -1,0 +1,41 @@
+version: 1
+frame:
+  # Vehicle frame: x forward, y left, z up. Lengths are metres.
+  ego_axes: {x: forward, y: left, z: up}
+  origin: vehicle_center_projected_to_ground
+  unit_length: m
+  unit_angle: deg
+rotation:
+  convention: yaw_pitch_roll
+  # yaw positive left, pitch positive up, roll positive clockwise in the image
+  order: yaw_pitch_roll
+image_hw: [2464, 2048]
+
+# Intrinsics from dmp_data/colmap/sparse/0/cameras.txt for the regular images
+# (filenames without the ,+15deg suffix). The source model is PINHOLE.
+cameras:
+  - id: CAM_FRONT_WIDE
+    position_ego_m: [-0.924, 0.00, 3.205]
+    ypr_deg: [0.0, 0.0, 0.0]
+    intrinsic: [[942.9103885, 0.0, 1012.480064], [0.0, 942.9103885, 1212.360282], [0.0, 0.0, 1.0]]
+    image_hw: [2464, 2048]
+  - id: CAM_FRONT_RIGHT
+    position_ego_m: [-0.9693, -0.0623, 3.205]
+    ypr_deg: [-72.0, 0.0, 0.0]
+    intrinsic: [[947.0767, 0.0, 1013.168386], [0.0, 947.0767, 1216.460255], [0.0, 0.0, 1.0]]
+    image_hw: [2464, 2048]
+  - id: CAM_BACK_RIGHT
+    position_ego_m: [-1.0425, -0.0385, 3.205]
+    ypr_deg: [-144.0, 0.0, 0.0]
+    intrinsic: [[936.8167592, 0.0, 1023.238171], [0.0, 936.8167592, 1222.381327], [0.0, 0.0, 1.0]]
+    image_hw: [2464, 2048]
+  - id: CAM_BACK_LEFT
+    position_ego_m: [-1.0425, 0.0385, 3.205]
+    ypr_deg: [144.0, 0.0, 0.0]
+    intrinsic: [[944.0099983, 0.0, 1017.279371], [0.0, 944.0099983, 1202.426403], [0.0, 0.0, 1.0]]
+    image_hw: [2464, 2048]
+  - id: CAM_FRONT_LEFT
+    position_ego_m: [-0.9693, 0.0623, 3.205]
+    ypr_deg: [72.0, 0.0, 0.0]
+    intrinsic: [[941.644451, 0.0, 1014.61384], [0.0, 941.644451, 1215.855179], [0.0, 0.0, 1.0]]
+    image_hw: [2464, 2048]
