@@ -45,6 +45,13 @@ OUT_NAMES_MODEL = (
 OUT_NAMES_NO_LG = [n for n in OUT_NAMES_MODEL
                    if n not in ("lg_pts", "lg_meta", "lg_adj")]
 HIST_N = 3
+CAM_LAYOUTS = {
+    "full": ["CAM_FRONT_WIDE", "CAM_FRONT_LEFT", "CAM_FRONT_RIGHT",
+             "CAM_BACK_WIDE", "CAM_BACK_LEFT", "CAM_BACK_RIGHT",
+             "CAM_FRONT_NARROW", "CAM_BACK_NARROW"],
+    "5cam": ["CAM_FRONT_WIDE", "CAM_FRONT_RIGHT", "CAM_BACK_RIGHT",
+             "CAM_BACK_LEFT", "CAM_FRONT_LEFT"],
+}
 
 
 _POOL_CACHE = {}
@@ -553,8 +560,8 @@ def main():
                          "do not carry args (the distillation output)")
     ap.add_argument("--seg-bias", default="",
                     help="bake the BEV Seg decision-boundary calibration into the final bias. "
-                         "e.g. 4:0.75,5:1.0,6:0.5 (measured: mIoU +1.0-1.4%, "
-                         "laneline +7-15%, line-width ratio 3.1->1.05)")
+                         "e.g. 4:0.75,5:1.0,6:0.5 (measured: mIoU +1.0-1.4%%, "
+                         "laneline +7-15%%, line-width ratio 3.1->1.05)")
     ap.add_argument("--drop", default="",
                     help="comma-separated output names to leave out, e.g. "
                          "occ,pl,unk. Their subgraphs then get pruned.")
@@ -609,7 +616,17 @@ def main():
     ap.add_argument("--n-cams", type=int, default=8,
                     help="cameras in the exported graph. CAMS ends with "
                          "CAM_BACK_NARROW, so 7 drops exactly that one.")
+    ap.add_argument("--cam-layout", choices=tuple(CAM_LAYOUTS), default="full",
+                    help="camera slot order: full (8 cameras) or 5cam "
+                         "(FRONT_WIDE, FRONT_RIGHT, BACK_RIGHT, BACK_LEFT, FRONT_LEFT)")
     args = ap.parse_args()
+
+    expected_cams = len(CAM_LAYOUTS[args.cam_layout])
+    if args.cam_layout == "5cam" and args.n_cams != 8:
+        ap.error("--cam-layout 5cam cannot be combined with --n-cams")
+    if args.cam_layout == "full" and args.n_cams != 8:
+        # Preserve the existing --n-cams behavior for full-layout variants.
+        expected_cams = args.n_cams
 
     net = build(args.ckpt, mv=args.model, seg_bias=args.seg_bias)
     if args.quant_stat_head > 0:
@@ -627,7 +644,7 @@ def main():
     # The network is camera-count agnostic (verified: a 7-camera forward runs
     # and emits depth for 7), so dropping CAM_BACK_NARROW is purely an
     # input-side change worth 1/8 of the backbone and the depth tower.
-    NC = args.n_cams
+    NC = expected_cams
     imgs = (torch.rand(1, NC, 3, 432, 768) * 255).to(torch.uint8) \
         if args.uint8_in else torch.randn(1, NC, 3, 432, 768)
     K = torch.eye(3).repeat(1, NC, 1, 1)

@@ -7,6 +7,7 @@
 ## 必須データ
 
 推論用データは、シーンごとに次の構成にします。
+※画像のファイル名はmanifest.jsonで定義するため下記のとおりである必要はありません。
 
 ```text
 my_data/
@@ -145,7 +146,46 @@ np.savez(
 - HD map
 - LiDARデータ
 
-## 5カメラで推論する場合
+## Ladybugの5カメラで推論する場合
+
+### Data変換
+DMPのデータからMeteorが扱えるデータ形式に変換する必要がある。
+生成物は主に3つ。
+
+1. manifest.json
+2. images
+3. ego_motion.npz
+
+以下のスクリプトを実行することで既存のデータから変換を行うことができる。
+
+```
+python3 dmp_tools/convert_camera_calib.py \
+    dmp_tools/camera_mounts.yaml \
+    --images dmp_data/colmap/images \
+    --run-data dmp_data/run_data.txt \
+    --output out/custom_dataset
+```
+
+各引数はそれぞれ以下の通り。
+
+```
+dmp_tools/camera_mounts.yaml：各カメラの内部パラメータや取付位置を定義したファイル
+--images dmp_data/colmap/images：Colmapフォーマットのカメラ画像が保存されているディレクトリ
+--run-data dmp_data/run_data.txt：シーン名とそれに紐づくRecordIDを定義したファイル
+--output out/custom_dataset：生成されたファイルを保存するルートディレクトリ。この下にrun_data.txtで定義したシーンごとにファイルが生成される
+```
+
+### モデル変換
+
+これ以降の手順はすべて下記スクリプト内で一括で実行される。
+データの保存先など必要に応じて適宜修正して使ってください。
+```
+cd <METEOR.gitのRoot Directory>
+
+bash dmp_tools/exec_batch.sh
+```
+
+#### 詳細
 
 公開されている `meteor_v157c3Z.onnx` は入力形状が8カメラ固定なので、5枚の画像をそのまま渡すことはできません。リポジトリのエクスポータはカメラ数を変更できるため、`meteor_v157.pt` から5カメラ用ONNXを作成します。
 
@@ -153,7 +193,7 @@ np.savez(
 python3 deploy/export_onnx.py \
   --ckpt models/meteor_v157.pt \
   --model v52 \
-  --n-cams 5 \
+  --cam-layout 5cam \
   --uint8-in \
   --argmax-out \
   --lane-logits \
@@ -162,30 +202,26 @@ python3 deploy/export_onnx.py \
   --out out/meteor_v157_5cam.onnx
 ```
 
-このコマンドにはPyTorch、ONNX、ONNX Runtimeなど、再エクスポート用の依存パッケージが必要です。`--n-cams 5` は、標準カメラ順序の先頭5スロットを入力にする設定です。
+Ladybugのデータを使えるようにするため、8カメラの序列とは異なる以下の序列でカメラ画像の順番を定義しています。
 
 ```text
 CAM_FRONT_WIDE
-CAM_FRONT_LEFT
 CAM_FRONT_RIGHT
-CAM_BACK_WIDE
+CAM_BACK_RIGHT
 CAM_BACK_LEFT
+CAM_FRONT_LEFT
 ```
-
-手持ちの5台がこの構成と異なる場合は、次のどちらかにします。
-
-- 画像を上記5スロットの意味に合わせて用意し、各画像に対応する実際の `K` と `T_ego_cam` を設定する
-- モデルを自前のカメラ構成で再学習し、その構成で再エクスポートする
 
 8カメラ用の学習済み重みをそのまま5カメラ化すれば、計算グラフは動かせます。ただし、視野の欠落、カメラ配置の違い、自車データと学習データのドメイン差によって、検出・BEV・経路推定の精度が低下する可能性があります。実運用の精度が必要な場合は、5カメラ構成のデータでファインチューニングまたは再学習してください。
 
 5カメラ用ONNXを作成した後は、通常のONNX確認コマンドで実行できます。
 
 ```bash
-python3 hf/onnx_smoke_test.py \
-  --onnx out/meteor_v157_5cam.onnx \
-  --root my_data/scene_name \
-  --frame 0
+python3 deploy/orin_realtime.py \
+  --engine out/meteor_v157_5cam_fp16.engine \
+  --cam-layout 5cam \
+  --root out/custom_dataset \
+  --out out/dmp.mp4
 ```
 
 この確認スクリプトは現在8カメラ前提のため、5カメラ用ONNXを使う場合は、`hf/onnx_smoke_test.py` のカメラ配列と `load_frame()` の入力作成を5カメラ用に変更する必要があります。画像・`K`・`T_cam_ego` の順序を、エクスポート時の5スロットと必ず一致させてください。

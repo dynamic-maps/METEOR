@@ -35,6 +35,13 @@ from deploy import orin_render as R                              # noqa: E402
 from deploy.viz_np import decode_boxes2d_ms_np                   # noqa: E402
 
 CAMS = R.CAMS
+CAM_LAYOUTS = {
+    "full": ["CAM_FRONT_WIDE", "CAM_FRONT_LEFT", "CAM_FRONT_RIGHT",
+             "CAM_BACK_WIDE", "CAM_BACK_LEFT", "CAM_BACK_RIGHT",
+             "CAM_FRONT_NARROW", "CAM_BACK_NARROW"],
+    "5cam": ["CAM_FRONT_WIDE", "CAM_FRONT_RIGHT", "CAM_BACK_RIGHT",
+             "CAM_BACK_LEFT", "CAM_FRONT_LEFT"],
+}
 
 
 _LIDAR = os.environ.get("METEOR_LIDAR", "0") == "1"
@@ -159,13 +166,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--engine", required=True)
     ap.add_argument("--root", default="fast")
+    ap.add_argument("--cam-layout", choices=tuple(CAM_LAYOUTS), default="full",
+                    help="camera slot order; must match the ONNX export")
     ap.add_argument("--stride", type=int, default=1)
+    ap.add_argument("--scenes-file", default=None,
+                    help="text file with one scene name per line")
     ap.add_argument("--display", action="store_true")
     ap.add_argument("--out", default=None)
     ap.add_argument("--loop", action="store_true")
     ap.add_argument("--limit", type=int, default=0,
                     help="stop after N frames (0 = all)")
     a = ap.parse_args()
+
+    global CAMS
+    CAMS = list(CAM_LAYOUTS[a.cam_layout])
+    R.CAMS = list(CAMS)
+    R.CAM_DRAW = list(CAMS)
+    # Keep the renderer's fixed 4x2 canvas, filling unused tiles as blanks.
+    R.CAM8 = list(CAMS) + [f"__blank_{i}" for i in range(8 - len(CAMS))]
 
     N_SLOTS = 4
     # occ is used for rendering, so copy it (2026-08-16). The rest is unused,
@@ -180,7 +198,6 @@ def main():
     # 2026-08-15: pass the same list to the renderer (R.CAMS). Without this
     # update the rendering side stays at 7 cameras and the 8th camera, which
     # is actually used as input, is displayed as "(blank)".
-    global CAMS
     if rt.shapes.get("imgs", (1, 7))[1] == 8 and len(CAMS) == 7:
         CAMS = CAMS + ["CAM_BACK_NARROW"]
         R.CAMS = CAMS
@@ -201,11 +218,21 @@ def main():
     from deploy.t4input import is_t4_scene
     _root = a.root.rstrip("/")
     if os.path.isfile(os.path.join(_root, "manifest.json")) or is_t4_scene(_root):
+        if a.scenes_file:
+            ap.error("--scenes-file requires --root to be a dataset directory")
         # --root is the scene itself (for t4, annotation/sample.json sits directly
         # under it). Unless this check comes first, subfolders inside the scene
         # such as tmp/ are mistaken for the scene list and we crash (bit us on the laptop).
         a.root = os.path.dirname(_root) or "."
         scenes = [os.path.basename(_root)]
+    elif a.scenes_file:
+        with open(a.scenes_file) as f:
+            scenes = [line.strip() for line in f if line.strip()]
+        missing = [s for s in scenes if not os.path.isdir(
+            os.path.join(a.root, s))]
+        if missing:
+            ap.error(f"scenes listed in {a.scenes_file} are missing from "
+                     f"{a.root}: {', '.join(missing[:5])}")
     else:
         scenes = sorted(
             s for s in os.listdir(a.root)
