@@ -169,8 +169,6 @@ def main():
     ap.add_argument("--cam-layout", choices=tuple(CAM_LAYOUTS), default="full",
                     help="camera slot order; must match the ONNX export")
     ap.add_argument("--stride", type=int, default=1)
-    ap.add_argument("--scenes-file", default=None,
-                    help="text file with one scene name per line")
     ap.add_argument("--display", action="store_true")
     ap.add_argument("--out", default=None)
     ap.add_argument("--loop", action="store_true")
@@ -218,21 +216,11 @@ def main():
     from deploy.t4input import is_t4_scene
     _root = a.root.rstrip("/")
     if os.path.isfile(os.path.join(_root, "manifest.json")) or is_t4_scene(_root):
-        if a.scenes_file:
-            ap.error("--scenes-file requires --root to be a dataset directory")
         # --root is the scene itself (for t4, annotation/sample.json sits directly
         # under it). Unless this check comes first, subfolders inside the scene
         # such as tmp/ are mistaken for the scene list and we crash (bit us on the laptop).
         a.root = os.path.dirname(_root) or "."
         scenes = [os.path.basename(_root)]
-    elif a.scenes_file:
-        with open(a.scenes_file) as f:
-            scenes = [line.strip() for line in f if line.strip()]
-        missing = [s for s in scenes if not os.path.isdir(
-            os.path.join(a.root, s))]
-        if missing:
-            ap.error(f"scenes listed in {a.scenes_file} are missing from "
-                     f"{a.root}: {', '.join(missing[:5])}")
     else:
         scenes = sorted(
             s for s in os.listdir(a.root)

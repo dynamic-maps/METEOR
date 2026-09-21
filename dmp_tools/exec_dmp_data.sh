@@ -42,7 +42,8 @@ METEOR_TH2D=0.30 METEOR_SEG2D_OVERLAY=0 METEOR_OCC_PANEL=0 METEOR_2D_HIDE=7 PYTH
 python3 deploy/orin_realtime.py \
   --engine "$ENGINE_FILE" \
   --cam-layout 5cam \
-  --root out/custom_dataset \
-  --scenes-file out/custom_dataset/scenes.txt \
-  --out out/dmp.mp4
+  --root out/custom_dataset_3dgs \
+  --out out/dmp_3dgs.mp4
+
+
 
