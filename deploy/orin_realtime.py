@@ -45,6 +45,19 @@ CAM_LAYOUTS = {
 
 
 _LIDAR = os.environ.get("METEOR_LIDAR", "0") == "1"
+DUMP_OUTPUTS = ("lane", "lane_logit", "seg2d", "hm2d_s0", "hm2d_s1",
+                "hm2d_s2", "hm")
+
+
+def dump_outputs(dump_dir, scene, frame, out):
+    """Save selected engine outputs for one frame without changing decoding."""
+    scene_dir = os.path.join(dump_dir, scene)
+    os.makedirs(scene_dir, exist_ok=True)
+    arrays = {name: np.asarray(out[name]).copy() for name in DUMP_OUTPUTS
+              if name in out}
+    arrays["frame"] = np.asarray(frame, dtype=np.int64)
+    np.savez_compressed(os.path.join(scene_dir, f"{int(frame):04d}.npz"),
+                        **arrays)
 
 
 def loader(scenes, root, stride, q_raw, stop, loop, in_slots=None, in_free=None):
@@ -126,7 +139,8 @@ def loader(scenes, root, stride, q_raw, stop, loop, in_slots=None, in_free=None)
                     except Exception:
                         lb = None
                 try:
-                    q_raw.put((raw, imgs, K, Tc, v0, po, si, lb), timeout=5)
+                    q_raw.put((s, int(f["frame"]), raw, imgs, K, Tc, v0,
+                               po, si, lb), timeout=5)
                 except queue.Full:
                     if stop.is_set():
                         return
@@ -141,7 +155,7 @@ def producer(rt, q_raw, q, free_slots, stop, in_free=None):
         item = q_raw.get()
         if item is None:
             break
-        raw, imgs, K, Tc, v0, pose, si, lb = item
+        scene, frame, raw, imgs, K, Tc, v0, pose, si, lb = item
         if not u8:
             imgs = imgs.astype(np.float32) / 255.0
         slot = free_slots.get()          # blocks until a consumer released
@@ -155,7 +169,8 @@ def producer(rt, q_raw, q, free_slots, stop, in_free=None):
         dt = (time.time() - t0) * 1000
         # out holds VIEWS into host slot `slot`; the renderer releases it
         try:
-            q.put((raw, K, Tc, v0, out, dt, pose, slot), timeout=5)
+            q.put((scene, frame, raw, K, Tc, v0, out, dt, pose, slot),
+                timeout=5)
         except queue.Full:
             if stop.is_set():
                 return
@@ -171,10 +186,17 @@ def main():
     ap.add_argument("--stride", type=int, default=1)
     ap.add_argument("--display", action="store_true")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--dump-dir", default=None,
+                    help="save selected raw outputs as per-frame NPZ files")
     ap.add_argument("--loop", action="store_true")
     ap.add_argument("--limit", type=int, default=0,
                     help="stop after N frames (0 = all)")
     a = ap.parse_args()
+
+    if a.dump_dir:
+        os.makedirs(a.dump_dir, exist_ok=True)
+        print(f"[dump] selected outputs -> {a.dump_dir}: {DUMP_OUTPUTS}",
+              flush=True)
 
     global CAMS
     CAMS = list(CAM_LAYOUTS[a.cam_layout])
@@ -290,8 +312,10 @@ def main():
                 q_seq.put(None)
                 done_q.put(None)
                 return
-            seq, raw, K, Tc, v0, out, dt, pose, slot = item2
+            seq, scene, frame, raw, K, Tc, v0, out, dt, pose, slot = item2
             t0 = time.time()
+            if a.dump_dir:
+                dump_outputs(a.dump_dir, scene, frame, out)
             canvas = R.compose_frame(raw, K, Tc, v0, out, dt,
                                      fps_now=(seq / max(time.time()
                                                         - t_start, 1e-3)),

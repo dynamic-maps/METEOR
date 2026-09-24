@@ -38,12 +38,11 @@ echo "[INFO] Running inference..."
 
 mkdir -p out/dmp
 
-METEOR_TH2D=0.30 METEOR_SEG2D_OVERLAY=0 METEOR_OCC_PANEL=0 METEOR_2D_HIDE=7 PYTHONPATH=. \
+METEOR_TH2D=0.30 METEOR_SEG2D_OVERLAY=1 METEOR_OCC_PANEL=0 METEOR_2D_HIDE=7 PYTHONPATH=. \
 python3 deploy/orin_realtime.py \
   --engine "$ENGINE_FILE" \
   --cam-layout 5cam \
-  --root out/custom_dataset_3dgs \
-  --out out/dmp_3dgs.mp4
-
-
+  --root out/custom_dataset \
+  --dump-dir out/dmp_intermediates \
+  --out out/dmp.mp4
 
